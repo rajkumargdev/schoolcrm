@@ -1,122 +1,96 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../../api';
 
-function Dashboard() {
-  const [students, setStudents] = useState([]);
+function StudentDashboard() {
+  const [marks, setMarks] = useState([]);
   const [tests, setTests] = useState([]);
   const navigate = useNavigate();
   const name = localStorage.getItem('name');
-
-  const fetchData = () => {
-    api.get('/students').then(res => setStudents(res.data));
-    api.get('/tests').then(res => setTests(res.data));
-  };
+  const studentId = JSON.parse(atob(localStorage.getItem('token').split('.')[1])).id;
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    api.get(`/marks/student/${studentId}`).then(res => setMarks(res.data));
+    api.get('/tests').then(res => setTests(res.data));
+  }, [studentId]);
 
   const handleLogout = () => {
     localStorage.clear();
     navigate('/login');
   };
 
-  const deleteStudent = async (id) => {
-    if (!window.confirm('Delete this student and all their marks?')) return;
-    await api.delete(`/students/${id}`);
-    fetchData();
+  const chartData = () => {
+    const subjects = [...new Set(marks.map(m => m.subject_name))];
+    return subjects.map(subject => {
+      const entry = { subject };
+      marks
+        .filter(m => m.subject_name === subject)
+        .forEach(m => {
+          entry[m.test_name] = parseFloat(m.score);
+        });
+      return entry;
+    });
   };
 
-  const deleteTest = async (id) => {
-    if (!window.confirm('Delete this test and all its marks?')) return;
-    await api.delete(`/tests/${id}`);
-    fetchData();
-  };
+  const testNames = [...new Set(marks.map(m => m.test_name))];
+  const colors = ['#1890ff', '#52c41a', '#fa8c16', '#f5222d', '#722ed1'];
 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
         <h2>Welcome, {name}</h2>
-        <div style={styles.headerBtns}>
-          <button style={styles.btn} onClick={() => navigate('/teacher/add-student')}>+ Add Student</button>
-          <button style={styles.btn} onClick={() => navigate('/teacher/add-test')}>+ Add Test</button>
-          <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
-        </div>
+        <button style={styles.logoutBtn} onClick={handleLogout}>Logout</button>
       </div>
 
-      <h3>Students — Class 7</h3>
-      {students.length === 0 ? (
-        <p>No students yet. Add one!</p>
-      ) : (
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Roll No</th>
-              <th style={styles.th}>Name</th>
-              <th style={styles.th}>Enter Marks</th>
-              <th style={styles.th}>Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map(s => (
-              <tr key={s.id}>
-                <td style={styles.td}>{s.roll_no}</td>
-                <td style={styles.td}>{s.name}</td>
-                <td style={styles.td}>
-                  {tests.map(t => (
-                    <button
-                      key={t.id}
-                      style={styles.markBtn}
-                      onClick={() => navigate(`/teacher/marks/${s.id}`, { state: { student: s, test: t } })}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
-                </td>
-                <td style={styles.td}>
-                  <button
-                    style={styles.deleteBtn}
-                    onClick={() => deleteStudent(s.id)}
-                  >
-                    🗑️ Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <h3>My Marks — Class 7</h3>
 
-      <h3 style={{ marginTop: '2rem' }}>Tests</h3>
-      {tests.length === 0 ? (
-        <p>No tests yet. Add one!</p>
+      {marks.length === 0 ? (
+        <p>No marks available yet.</p>
       ) : (
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Test Name</th>
-              <th style={styles.th}>Date</th>
-              <th style={styles.th}>Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tests.map(t => (
-              <tr key={t.id}>
-                <td style={styles.td}>{t.name}</td>
-                <td style={styles.td}>{t.test_date}</td>
-                <td style={styles.td}>
-                  <button
-                    style={styles.deleteBtn}
-                    onClick={() => deleteTest(t.id)}
-                  >
-                    🗑️ Delete
-                  </button>
-                </td>
+        <>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Subject</th>
+                {testNames.map(t => (
+                  <th key={t} style={styles.th}>{t}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {[...new Set(marks.map(m => m.subject_name))].map(subject => (
+                <tr key={subject}>
+                  <td style={styles.td}>{subject}</td>
+                  {testNames.map(testName => {
+                    const mark = marks.find(
+                      m => m.subject_name === subject && m.test_name === testName
+                    );
+                    return (
+                      <td key={testName} style={styles.td}>
+                        {mark ? `${mark.score} / ${mark.max_score}` : '-'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 style={{ marginTop: '2rem' }}>Progress Chart</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartData()} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="subject" tick={{ fontSize: 12 }} />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              {testNames.map((t, i) => (
+                <Bar key={t} dataKey={t} fill={colors[i % colors.length]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </>
       )}
     </div>
   );
@@ -125,14 +99,10 @@ function Dashboard() {
 const styles = {
   container: { padding: '2rem', maxWidth: '900px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' },
-  headerBtns: { display: 'flex', gap: '0.5rem' },
-  btn: { padding: '0.5rem 1rem', background: '#1890ff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
   logoutBtn: { padding: '0.5rem 1rem', background: '#ff4d4f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: { background: '#f0f2f5', padding: '0.75rem', textAlign: 'left', border: '1px solid #ddd' },
   td: { padding: '0.75rem', border: '1px solid #ddd' },
-  markBtn: { marginRight: '0.5rem', padding: '0.25rem 0.5rem', background: '#52c41a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
-  deleteBtn: { padding: '0.25rem 0.75rem', background: '#ff4d4f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
 };
 
-export default Dashboard;
+export default StudentDashboard;
