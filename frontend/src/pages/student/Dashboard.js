@@ -5,14 +5,12 @@ import api from '../../api';
 
 function StudentDashboard() {
   const [marks, setMarks] = useState([]);
-  const [tests, setTests] = useState([]);
   const navigate = useNavigate();
   const name = localStorage.getItem('name');
   const studentId = JSON.parse(atob(localStorage.getItem('token').split('.')[1])).id;
 
   useEffect(() => {
     api.get(`/marks/student/${studentId}`).then(res => setMarks(res.data));
-    api.get('/tests').then(res => setTests(res.data));
   }, [studentId]);
 
   const handleLogout = () => {
